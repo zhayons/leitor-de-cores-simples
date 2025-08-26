@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Detector de 5 Cores</title>
+  <style>
+    body { font-family: sans-serif; background:#111; color:#eee; display:grid; place-items:center; min-height:100vh; margin:0; }
+    video { width: 90vw; max-width:600px; border-radius:12px; }
+    #swatch { width:80px; height:80px; border-radius:10px; border:2px solid white; margin:10px auto; }
+    .info { text-align:center; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <div>
+    <h2>Detector de Cor (5 Cores)</h2>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" style="display:none"></canvas>
+    <div id="swatch"></div>
+    <div class="info">
+      <div id="colorName">—</div>
+      <div id="rgbVal">—</div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const swatch = document.getElementById("swatch");
+    const colorNameEl = document.getElementById("colorName");
+    const rgbValEl = document.getElementById("rgbVal");
+
+    let stream = null;
+    let lastSpoken = "";
+    let speaking = true;
+
+    // Inicia câmera
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:"environment" } });
+        video.srcObject = stream;
+        requestAnimationFrame(analyze);
+      } catch(e) {
+        alert("Erro ao acessar câmera: " + e);
+      }
+    }
+
+    // Função para identificar uma das 5 cores
+    function classify(r,g,b) {
+      const avg = (r+g+b)/3;
+      if(avg < 40) return "preto";
+      if(r > 180 && g > 180 && b < 100) return "amarelo";
+      if(b > 150 && b > r+40 && b > g+40) return "azul";
+      if(r > 180 && g < 80 && b < 80) return "vermelho vibrante";
+      if(r > 80 && r < 160 && r > g+30 && r > b+30) return "vermelho amarronzado escuro";
+      return "indefinido";
+    }
+
+    function analyze() {
+      if(video.videoWidth === 0) { requestAnimationFrame(analyze); return; }
+      const ctx = canvas.getContext("2d", { willReadFrequently:true });
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0,0,canvas.width,canvas.height);
+
+      const size = 40;
+      const x = (canvas.width-size)/2;
+      const y = (canvas.height-size)/2;
+      const data = ctx.getImageData(x,y,size,size).data;
+
+      let r=0,g=0,b=0,count=0;
+      for(let i=0;i<data.length;i+=4){
+        r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++;
+      }
+      r=(r/count)|0; g=(g/count)|0; b=(b/count)|0;
+
+      const name = classify(r,g,b);
+      swatch.style.background = `rgb(${r},${g},${b})`;
+      colorNameEl.textContent = "Cor: " + name;
+      rgbValEl.textContent = `RGB(${r},${g},${b})`;
+
+      // Falar quando muda
+      if(speaking && name !== "indefinido" && name !== lastSpoken) {
+        const u = new SpeechSynthesisUtterance(name);
+        u.lang = "pt-BR";
+        speechSynthesis.cancel();
+        speechSynthesis.speak(u);
+        lastSpoken = name;
+      }
+
+      requestAnimationFrame(analyze);
+    }
+
+    startCamera();
+  </script>
+</body>
+</html>
