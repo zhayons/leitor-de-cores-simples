@@ -3,24 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Detector de 5 Cores</title>
+  <title>Detector de Cor Configurável</title>
   <style>
-    body { font-family: sans-serif; background:#111; color:#eee; display:grid; place-items:center; min-height:100vh; margin:0; }
+    body { font-family: sans-serif; background:#111; color:#eee; display:flex; flex-direction:column; align-items:center; margin:0; padding:10px; }
     video { width: 90vw; max-width:600px; border-radius:12px; }
+    canvas { display:none; }
     #swatch { width:80px; height:80px; border-radius:10px; border:2px solid white; margin:10px auto; }
     .info { text-align:center; margin-top:10px; }
+    .overlay {
+      position:absolute;
+      top:0; left:0; right:0; bottom:0;
+      display:flex; align-items:center; justify-content:center;
+      pointer-events:none;
+    }
+    .center-box {
+      width:60px; height:60px;
+      border:3px solid yellow;
+      border-radius:6px;
+      box-shadow:0 0 10px black inset;
+    }
+    .buttons { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; justify-content:center; }
+    button { padding:6px 10px; border-radius:6px; border:0; background:#333; color:white; cursor:pointer; }
+    button:hover { background:#555; }
+    .video-wrap { position:relative; display:inline-block; }
   </style>
 </head>
 <body>
-  <div>
-    <h2>Detector de Cor (5 Cores)</h2>
+  <h2>Detector de Cor Configurável</h2>
+  <div class="video-wrap">
     <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas" style="display:none"></canvas>
-    <div id="swatch"></div>
-    <div class="info">
-      <div id="colorName">—</div>
-      <div id="rgbVal">—</div>
-    </div>
+    <div class="overlay"><div class="center-box"></div></div>
+  </div>
+  <canvas id="canvas"></canvas>
+  <div id="swatch"></div>
+  <div class="info">
+    <div id="colorName">—</div>
+    <div id="rgbVal">—</div>
+  </div>
+
+  <div class="buttons">
+    <button onclick="setCurrentAs('preto')">Definir como preto</button>
+    <button onclick="setCurrentAs('amarelo')">Definir como amarelo</button>
+    <button onclick="setCurrentAs('azul')">Definir como azul</button>
+    <button onclick="setCurrentAs('vermelho vibrante')">Definir como vermelho vibrante</button>
+    <button onclick="setCurrentAs('vermelho escuro')">Definir como vermelho escuro</button>
   </div>
 
   <script>
@@ -34,7 +60,15 @@
     let lastSpoken = "";
     let speaking = true;
 
-    // Inicia câmera
+    // Dicionário de cores configuráveis
+    let customColors = {
+      "preto": [0,0,0],
+      "amarelo": [255,255,0],
+      "azul": [0,0,255],
+      "vermelho vibrante": [255,0,0],
+      "vermelho escuro": [120,40,40]
+    };
+
     async function startCamera() {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:"environment" } });
@@ -45,28 +79,28 @@
       }
     }
 
-    // Função para identificar uma das 5 cores
     function classify(r,g,b) {
-      const avg = (r+g+b)/3;
-      if(avg < 40) return "preto";
-      if(r > 180 && g > 180 && b < 100) return "amarelo";
-      if(b > 150 && b > r+40 && b > g+40) return "azul";
-      if(r > 180 && g < 80 && b < 80) return "vermelho vibrante";
-      if(r > 80 && r < 160 && r > g+30 && r > b+30) return "vermelho amarronzado escuro";
-      return "indefinido";
+      let best = "indefinido";
+      let bestDist = Infinity;
+      for(const [name,[cr,cg,cb]] of Object.entries(customColors)) {
+        const dr=r-cr, dg=g-cg, db=b-cb;
+        const dist = dr*dr+dg*dg+db*db;
+        if(dist<bestDist){ bestDist=dist; best=name; }
+      }
+      return best;
     }
 
     function analyze() {
       if(video.videoWidth === 0) { requestAnimationFrame(analyze); return; }
-      const ctx = canvas.getContext("2d", { willReadFrequently:true });
+      const ctx = canvas.getContext("2d",{ willReadFrequently:true });
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0,0,canvas.width,canvas.height);
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
 
-      const size = 40;
-      const x = (canvas.width-size)/2;
-      const y = (canvas.height-size)/2;
-      const data = ctx.getImageData(x,y,size,size).data;
+      const size=50;
+      const x=(canvas.width-size)/2;
+      const y=(canvas.height-size)/2;
+      const data=ctx.getImageData(x,y,size,size).data;
 
       let r=0,g=0,b=0,count=0;
       for(let i=0;i<data.length;i+=4){
@@ -74,21 +108,38 @@
       }
       r=(r/count)|0; g=(g/count)|0; b=(b/count)|0;
 
-      const name = classify(r,g,b);
-      swatch.style.background = `rgb(${r},${g},${b})`;
-      colorNameEl.textContent = "Cor: " + name;
-      rgbValEl.textContent = `RGB(${r},${g},${b})`;
+      const name=classify(r,g,b);
+      swatch.style.background=`rgb(${r},${g},${b})`;
+      colorNameEl.textContent="Cor: "+name;
+      rgbValEl.textContent=`RGB(${r},${g},${b})`;
 
-      // Falar quando muda
-      if(speaking && name !== "indefinido" && name !== lastSpoken) {
-        const u = new SpeechSynthesisUtterance(name);
-        u.lang = "pt-BR";
+      if(speaking && name!==lastSpoken){
+        const u=new SpeechSynthesisUtterance(name);
+        u.lang="pt-BR";
         speechSynthesis.cancel();
         speechSynthesis.speak(u);
-        lastSpoken = name;
+        lastSpoken=name;
       }
 
       requestAnimationFrame(analyze);
+    }
+
+    function setCurrentAs(label){
+      if(video.videoWidth===0) return;
+      const ctx=canvas.getContext("2d",{willReadFrequently:true});
+      const size=50;
+      const x=(canvas.width-size)/2;
+      const y=(canvas.height-size)/2;
+      const data=ctx.getImageData(x,y,size,size).data;
+
+      let r=0,g=0,b=0,count=0;
+      for(let i=0;i<data.length;i+=4){
+        r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++;
+      }
+      r=(r/count)|0; g=(g/count)|0; b=(b/count)|0;
+
+      customColors[label]=[r,g,b];
+      alert(`Cor "${label}" definida como RGB(${r},${g},${b})`);
     }
 
     startCamera();
