@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Detector de Cor Configurável</title>
+  <title>Detector de Cor com Timer</title>
   <style>
     body { font-family: sans-serif; background:#111; color:#eee; display:flex; flex-direction:column; align-items:center; margin:0; padding:10px; }
     video { width: 90vw; max-width:600px; border-radius:12px; }
@@ -26,10 +26,12 @@
     button { padding:6px 10px; border-radius:6px; border:0; background:#333; color:white; cursor:pointer; }
     button:hover { background:#555; }
     .video-wrap { position:relative; display:inline-block; }
+    .progress-container { width:90vw; max-width:600px; height:12px; background:#333; border-radius:6px; overflow:hidden; margin-top:10px; }
+    .progress-bar { height:100%; width:0%; background:#0f0; transition:width 0.1s linear; }
   </style>
 </head>
 <body>
-  <h2>Detector de Cor Configurável</h2>
+  <h2>Detector de Cor com Timer</h2>
   <div class="video-wrap">
     <video id="video" autoplay playsinline muted></video>
     <div class="overlay"><div class="center-box"></div></div>
@@ -41,12 +43,18 @@
     <div id="rgbVal">—</div>
   </div>
 
+  <div class="progress-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
   <div class="buttons">
     <button onclick="setCurrentAs('preto')">Definir como preto</button>
     <button onclick="setCurrentAs('amarelo')">Definir como amarelo</button>
     <button onclick="setCurrentAs('azul')">Definir como azul</button>
-    <button onclick="setCurrentAs('vermelho vibrante')">Definir como vermelho vibrante</button>
-    <button onclick="setCurrentAs('vermelho escuro')">Definir como vermelho escuro</button>
+    <button onclick="setCurrentAs('vermelho')">Definir como vermelho</button>
+    <button onclick="setCurrentAs('marrom')">Definir como marrom</button>
+    <button onclick="setCurrentAs('verde')">Definir como verde</button>
+    <button onclick="setCurrentAs('rosa')">Definir como rosa</button>
   </div>
 
   <script>
@@ -55,19 +63,26 @@
     const swatch = document.getElementById("swatch");
     const colorNameEl = document.getElementById("colorName");
     const rgbValEl = document.getElementById("rgbVal");
+    const progressBar = document.getElementById("progressBar");
 
     let stream = null;
-    let lastSpoken = "";
-    let speaking = true;
 
-    // Dicionário de cores configuráveis
+    // Cores configuráveis (agora com verde e rosa)
     let customColors = {
       "preto": [0,0,0],
       "amarelo": [255,255,0],
       "azul": [0,0,255],
-      "vermelho vibrante": [255,0,0],
-      "vermelho escuro": [120,40,40]
+      "vermelho": [255,0,0],
+      "marrom": [120,40,40],
+      "verde": [0,200,0],
+      "rosa": [255,105,180]
     };
+
+    // Controle de fala com timer
+    const STABLE_TIME = 3000; // ms
+    let currentCandidate = null;
+    let candidateSince = 0;
+    let lastSpoken = "";
 
     async function startCamera() {
       try {
@@ -110,10 +125,21 @@
 
       const name=classify(r,g,b);
       swatch.style.background=`rgb(${r},${g},${b})`;
-      colorNameEl.textContent="Cor: "+name;
+      colorNameEl.textContent="Cor detectada: "+name;
       rgbValEl.textContent=`RGB(${r},${g},${b})`;
 
-      if(speaking && name!==lastSpoken){
+      // Lógica do timer
+      const now = performance.now();
+      if(name !== currentCandidate){
+        currentCandidate = name;
+        candidateSince = now;
+      }
+
+      const elapsed = now - candidateSince;
+      let progress = Math.min(1, elapsed / STABLE_TIME);
+      progressBar.style.width = (progress*100) + "%";
+
+      if(progress >= 1 && name !== lastSpoken && name !== "indefinido"){
         const u=new SpeechSynthesisUtterance(name);
         u.lang="pt-BR";
         speechSynthesis.cancel();
